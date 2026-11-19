@@ -1,3 +1,5 @@
+
+/* RESET */
 * {
   margin: 0;
   padding: 0;
@@ -5,11 +7,14 @@
 }
 
 body {
+  min-height: 100vh;
   font-family: Arial, sans-serif;
-  background: #111827;
-  color: white;
+  background:
+    radial-gradient(circle at top, #26364a 0%, #111827 55%, #090e18 100%);
+  color: #f8fafc;
 }
 
+/* MAIN */
 .app {
   min-height: 100vh;
   display: flex;
@@ -17,76 +22,237 @@ body {
   align-items: center;
   justify-content: center;
   gap: 20px;
-  padding: 20px;
+  padding: 25px 15px;
 }
 
 h1 {
-  font-size: 32px;
+  font-size: clamp(25px, 5vw, 36px);
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #f8fafc;
+  text-shadow: 0 3px 15px rgba(0, 0, 0, 0.4);
 }
 
+/* GAME STATUS */
 .status {
-  font-size: 18px;
-  color: #facc15;
+  min-height: 25px;
+  font-size: 17px;
+  font-weight: 600;
+  color: #eabf65;
+  text-align: center;
 }
 
+/* CHESS BOARD */
 .chess-board {
   width: min(90vw, 560px);
-  aspect-ratio: 1;
+  aspect-ratio: 1 / 1;
+
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  border: 5px solid #374151;
-  border-radius: 6px;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-rows: repeat(8, minmax(0, 1fr));
+
+  border: 8px solid #60452f;
+  border-radius: 5px;
   overflow: hidden;
+
+  background: #60452f;
+  box-shadow:
+    0 0 0 2px #9b7954,
+    0 15px 40px rgba(0, 0, 0, 0.5);
 }
 
+/* SQUARES */
 .square {
-  border: none;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+
   display: flex;
   justify-content: center;
   align-items: center;
+
+  border: none;
+  border-radius: 0;
+  appearance: none;
   cursor: pointer;
+  overflow: hidden;
+  aspect-ratio: 1 / 1;
+  transition: background-color 0.12s ease;
 }
 
+/* BOARD COLORS */
 .light {
-  background: #e5e7eb;
+  background: #eeeed2;
 }
 
 .dark {
-  background: #64748b;
+  background: #769656;
 }
 
+/* SELECTED SQUARE */
 .square.selected {
-  background: #eab308;
+  background: #f6d365;
 }
 
-.white-piece {
-  color: white;
-  text-shadow: 0 0 3px black, 0 0 3px black;
+/* LAST MOVE */
+.square.last-move {
+  background: #cdd16b;
 }
 
-.black-piece {
-  color: #111827;
-  text-shadow: 0 0 1px white;
-}
-
+/* PIECES */
 .square span {
-  font-size: clamp(25px, 8vw, 55px);
+  position: relative;
+  z-index: 2;
+
+  display: block;
+  font-family: "Segoe UI Symbol", "DejaVu Sans", sans-serif;
+  font-size: clamp(25px, 7vw, 55px);
   line-height: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* WHITE PIECES */
+.white-piece {
+  color: #ffffff;
+  text-shadow:
+    0 1px 2px #222,
+    0 2px 4px rgba(0, 0, 0, 0.7);
+}
+
+/* BLACK PIECES */
+.black-piece {
+  color: #171717;
+  text-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+/* POSSIBLE MOVE DOT */
+.square.possible-move::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+
+  width: 25%;
+  height: 25%;
+  border-radius: 50%;
+
+  background: rgba(20, 30, 20, 0.35);
+  pointer-events: none;
+}
+
+/* CAPTURE INDICATOR */
+.square.capture::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+
+  inset: 5%;
+  border: 5px solid rgba(20, 30, 20, 0.35);
+  border-radius: 50%;
+
+  pointer-events: none;
+}
+
+/* BUTTONS */
+.buttons {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .reset-btn {
-  padding: 12px 24px;
-  background: #eab308;
-  color: #111827;
+  padding: 12px 22px;
+
+  background: #d6a653;
+  color: #171717;
+
   border: none;
   border-radius: 8px;
-  font-size: 16px;
-  font-weight: bold;
+
+  font-size: 15px;
+  font-weight: 700;
   cursor: pointer;
-  transition: 0.2s;
+
+  transition: 0.2s ease;
 }
 
 .reset-btn:hover {
-  background: #facc15;
-  transform: scale(1.04);
+  background: #edc477;
+  transform: translateY(-2px);
+}
+
+.reset-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* PROMOTION */
+.promotion {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+
+  max-width: 350px;
+  padding: 18px;
+
+  background: #1e293b;
+  border: 1px solid #475569;
+  border-radius: 12px;
+}
+
+.promotion p {
+  width: 100%;
+  text-align: center;
+  font-weight: 600;
+}
+
+.promotion button {
+  width: 55px;
+  height: 55px;
+
+  font-size: 36px;
+  cursor: pointer;
+
+  border: none;
+  border-radius: 8px;
+  background: #eeeed2;
+
+  transition: 0.2s;
+}
+
+.promotion button:hover {
+  background: #eabf65;
+  transform: scale(1.08);
+}
+
+/* MOBILE */
+@media (max-width: 480px) {
+  .app {
+    gap: 15px;
+    padding: 15px 8px;
+  }
+
+  .chess-board {
+    width: min(94vw, 560px);
+    border-width: 5px;
+  }
+
+  .square span {
+    font-size: clamp(23px, 8vw, 42px);
+  }
+
+  .square.capture::after {
+    border-width: 3px;
+  }
+
+  .reset-btn {
+    padding: 11px 17px;
+    font-size: 14px;
+  }
 }
