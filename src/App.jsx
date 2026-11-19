@@ -1,515 +1,471 @@
-import { useState } from 'react'
+
+import { useEffect, useRef, useState } from 'react'
+import { Chess } from 'chess.js'
 import './App.css'
 
 const pieces = {
-  K: '♚',
-  Q: '♛',
-  R: '♜',
-  B: '♝',
-  N: '♞',
-  P: '♟',
+  w: {
+    k: '♔',
+    q: '♕',
+    r: '♖',
+    b: '♗',
+    n: '♘',
+    p: '♙',
+  },
+  b: {
+    k: '♚',
+    q: '♛',
+    r: '♜',
+    b: '♝',
+    n: '♞',
+    p: '♟',
+  },
 }
 
-const directions = {
-  diagonal: [[1, 1], [1, -1], [-1, 1], [-1, -1]],
-  straight: [[1, 0], [-1, 0], [0, 1], [0, -1]],
-  knight: [[1, 2], [2, 1], [-1, 2], [-2, 1], [1, -2], [2, -1], [-1, -2], [-2, -1]],
+const pieceValues = {
+  p: 100,
+  n: 320,
+  b: 330,
+  r: 500,
+  q: 900,
+  k: 20000,
 }
 
-const inside = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8
-
-function createBoard() {
-  const board = Array(64).fill(null)
-  const back = 'RNBQKBNR'
-
-  for (let c = 0; c < 8; c++) {
-    board[c] = 'b' + back[c]
-    board[8 + c] = 'bP'
-    board[48 + c] = 'wP'
-    board[56 + c] = 'w' + back[c]
+// Taxtadagi pozitsiyani baholash
+function evaluateBoard(chess) {
+  if (chess.isCheckmate()) {
+    return chess.turn() === 'w' ? -100000 : 100000
   }
 
-  return board
-}
+  if (chess.isDraw()) return 0
 
-function createGame() {
-  return {
-    board: createBoard(),
-    turn: 'w',
-    castling: {
-      wK: true,
-      wQ: true,
-      bK: true,
-      bQ: true,
-    },
-    enPassant: null,
-  }
-}
+  let score = 0
+  const board = chess.board()
 
-// Katak hujum ostidami?
-function isAttacked(board, square, byColor) {
-  const r = Math.floor(square / 8)
-  const c = square % 8
+  board.forEach((row, r) => {
+    row.forEach((piece, c) => {
+      if (!piece) return
 
-  // Piyoda hujumi
-  const pawnDir = byColor === 'w' ? 1 : -1
+      const value = pieceValues[piece.type]
+      const sign = piece.color === 'w' ? 1 : -1
 
-  for (const dc of [-1, 1]) {
-    const rr = r + pawnDir
-    const cc = c + dc
+      // Donaning asosiy qiymati
+      score += value * sign
 
-    if (
-      inside(rr, cc) &&
-      board[rr * 8 + cc] === byColor + 'P'
-    ) {
-      return true
-    }
-  }
+      // Markazdagi kataklar uchun bonus
+      const centerDistance =
+        Math.abs(3.5 - r) + Math.abs(3.5 - c)
 
-  // Ot hujumi
-  for (const [dr, dc] of directions.knight) {
-    const rr = r + dr
-    const cc = c + dc
+      const centerBonus = (7 - centerDistance) * 3
+      score += centerBonus * sign
 
-    if (
-      inside(rr, cc) &&
-      board[rr * 8 + cc] === byColor + 'N'
-    ) {
-      return true
-    }
-  }
+      // Piyodalarni oldinga surish
+      if (piece.type === 'p') {
+        const progress =
+          piece.color === 'w' ? 6 - r : r - 1
 
-  // Shoh hujumi
-  for (const dr of [-1, 0, 1]) {
-    for (const dc of [-1, 0, 1]) {
-      if (dr === 0 && dc === 0) continue
-
-      const rr = r + dr
-      const cc = c + dc
-
-      if (
-        inside(rr, cc) &&
-        board[rr * 8 + cc] === byColor + 'K'
-      ) {
-        return true
-      }
-    }
-  }
-
-  // Fil, rux, farzin hujumlari
-  const rays = [
-    ...directions.diagonal.map(([dr, dc]) => [dr, dc, 'BQ']),
-    ...directions.straight.map(([dr, dc]) => [dr, dc, 'RQ']),
-  ]
-
-  for (const [dr, dc, types] of rays) {
-    let rr = r + dr
-    let cc = c + dc
-
-    while (inside(rr, cc)) {
-      const piece = board[rr * 8 + cc]
-
-      if (piece) {
-        if (piece[0] === byColor && types.includes(piece[1])) {
-          return true
-        }
-        break
+        score += progress * 8 * sign
       }
 
-      rr += dr
-      cc += dc
-    }
-  }
+      // Ot va fillarni rivojlantirish
+      if (['n', 'b'].includes(piece.type)) {
+        const developed =
+          piece.color === 'w' ? r < 7 : r > 0
 
-  return false
-}
-
-function isInCheck(board, color) {
-  const king = board.indexOf(color + 'K')
-  if (king === -1) return false
-
-  return isAttacked(board, king, color === 'w' ? 'b' : 'w')
-}
-
-// Donaning mumkin bo'lgan yurishlari
-function getPseudoMoves(game, from) {
-  const { board, castling, enPassant, turn } = game
-  const piece = board[from]
-
-  if (!piece || piece[0] !== turn) return []
-
-  const color = piece[0]
-  const type = piece[1]
-  const row = Math.floor(from / 8)
-  const col = from % 8
-  const moves = []
-  const enemy = color === 'w' ? 'b' : 'w'
-
-  const add = (to, extra = {}) => {
-    moves.push({ from, to, ...extra })
-  }
-
-  // Piyoda
-  if (type === 'P') {
-    const dir = color === 'w' ? -1 : 1
-    const startRow = color === 'w' ? 6 : 1
-    const promotionRow = color === 'w' ? 0 : 7
-
-    const oneRow = row + dir
-    const one = oneRow * 8 + col
-
-    // Oldinga yurish
-    if (inside(oneRow, col) && !board[one]) {
-      add(one, oneRow === promotionRow ? { promotion: true } : {})
-
-      // 2 katak yurish
-      const twoRow = row + dir * 2
-      const two = twoRow * 8 + col
-
-      if (row === startRow && !board[two]) {
-        add(two, { doublePawn: true })
+        if (developed) score += 10 * sign
       }
-    }
-
-    // Diagonal urish
-    for (const dc of [-1, 1]) {
-      const cc = col + dc
-      const rr = row + dir
-
-      if (!inside(rr, cc)) continue
-
-      const to = rr * 8 + cc
-
-      if (board[to] && board[to][0] === enemy) {
-        add(to, rr === promotionRow ? { promotion: true } : {})
-      }
-
-      // En passant
-      if (to === enPassant) {
-        add(to, { enPassant: true })
-      }
-    }
-
-    return moves
-  }
-
-  // Ot va shoh
-  if (type === 'N' || type === 'K') {
-    const steps = type === 'N'
-      ? directions.knight
-      : [...directions.diagonal, ...directions.straight]
-
-    for (const [dr, dc] of steps) {
-      const rr = row + dr
-      const cc = col + dc
-
-      if (!inside(rr, cc)) continue
-
-      const to = rr * 8 + cc
-
-      if (!board[to] || board[to][0] === enemy) {
-        add(to)
-      }
-    }
-
-    // Rokировка
-    if (type === 'K') {
-      const home = color === 'w' ? 60 : 4
-      const enemyColor = color === 'w' ? 'b' : 'w'
-
-      if (from === home && !isAttacked(board, home, enemyColor)) {
-        // King-side
-        if (
-          castling[color + 'K'] &&
-          !board[home + 1] &&
-          !board[home + 2] &&
-          board[home + 3] === color + 'R' &&
-          !isAttacked(board, home + 1, enemyColor) &&
-          !isAttacked(board, home + 2, enemyColor)
-        ) {
-          add(home + 2, { castle: 'K' })
-        }
-
-        // Queen-side
-        if (
-          castling[color + 'Q'] &&
-          !board[home - 1] &&
-          !board[home - 2] &&
-          !board[home - 3] &&
-          board[home - 4] === color + 'R' &&
-          !isAttacked(board, home - 1, enemyColor) &&
-          !isAttacked(board, home - 2, enemyColor)
-        ) {
-          add(home - 2, { castle: 'Q' })
-        }
-      }
-    }
-
-    return moves
-  }
-
-  // Fil, rux, farzin
-  let steps = []
-
-  if (type === 'B') steps = directions.diagonal
-  if (type === 'R') steps = directions.straight
-  if (type === 'Q') steps = [...directions.diagonal, ...directions.straight]
-
-  for (const [dr, dc] of steps) {
-    let rr = row + dr
-    let cc = col + dc
-
-    while (inside(rr, cc)) {
-      const to = rr * 8 + cc
-
-      if (!board[to]) {
-        add(to)
-      } else {
-        if (board[to][0] === enemy) add(to)
-        break
-      }
-
-      rr += dr
-      cc += dc
-    }
-  }
-
-  return moves
-}
-
-// Yurishni bajarish
-function makeMove(game, move, promotion = 'Q') {
-  const board = [...game.board]
-  const piece = board[move.from]
-  const color = piece[0]
-
-  const castling = { ...game.castling }
-  let enPassant = null
-
-  // En passant urilgan piyodani olib tashlash
-  if (move.enPassant) {
-    board[move.to + (color === 'w' ? 8 : -8)] = null
-  }
-
-  // Donani ko'chirish
-  board[move.to] = piece
-  board[move.from] = null
-
-  // Piyodani boshqa donaga aylantirish
-  if (move.promotion) {
-    board[move.to] = color + promotion
-  }
-
-  // Piyoda 2 katak yurganda en passant imkoniyati
-  if (move.doublePawn) {
-    enPassant = (move.from + move.to) / 2
-  }
-
-  // Rokировка
-  if (move.castle === 'K') {
-    board[move.to - 1] = board[move.to + 1]
-    board[move.to + 1] = null
-  }
-
-  if (move.castle === 'Q') {
-    board[move.to + 1] = board[move.to - 2]
-    board[move.to - 2] = null
-  }
-
-  // Shoh yurishi — rokировка huquqlarini bekor qiladi
-  if (piece[1] === 'K') {
-    castling[color + 'K'] = false
-    castling[color + 'Q'] = false
-  }
-
-  // Rux yurganda huquqni bekor qilish
-  if (piece[1] === 'R') {
-    if (move.from === 0) castling.bQ = false
-    if (move.from === 7) castling.bK = false
-    if (move.from === 56) castling.wQ = false
-    if (move.from === 63) castling.wK = false
-  }
-
-  // Rux o'z joyida urib olinsa
-  if (move.to === 0) castling.bQ = false
-  if (move.to === 7) castling.bK = false
-  if (move.to === 56) castling.wQ = false
-  if (move.to === 63) castling.wK = false
-
-  return {
-    board,
-    turn: color === 'w' ? 'b' : 'w',
-    castling,
-    enPassant,
-  }
-}
-
-// Faqat shohni shaxda qoldirmaydigan yurishlar
-function getLegalMoves(game, from) {
-  const color = game.board[from]?.[0]
-  if (!color) return []
-
-  return getPseudoMoves(game, from).filter(move => {
-    const next = makeMove(game, move)
-    return !isInCheck(next.board, color)
+    })
   })
+
+  return score
 }
 
-function getAllLegalMoves(game) {
-  let all = []
+// Minimax + Alpha-Beta
+function minimax(chess, depth, alpha, beta) {
+  if (depth === 0 || chess.isGameOver()) {
+    return evaluateBoard(chess)
+  }
 
-  for (let i = 0; i < 64; i++) {
-    if (game.board[i]?.[0] === game.turn) {
-      all = all.concat(getLegalMoves(game, i))
+  const moves = chess.moves({ verbose: true })
+
+  // Oq yuradi: maksimal natijani qidiradi
+  if (chess.turn() === 'w') {
+    let best = -Infinity
+
+    for (const move of moves) {
+      const next = new Chess(chess.fen())
+      next.move({
+        from: move.from,
+        to: move.to,
+        promotion: move.promotion || 'q',
+      })
+
+      best = Math.max(
+        best,
+        minimax(next, depth - 1, alpha, beta)
+      )
+
+      alpha = Math.max(alpha, best)
+      if (beta <= alpha) break
+    }
+
+    return best
+  }
+
+  // Qora yuradi: minimal natijani qidiradi
+  let best = Infinity
+
+  for (const move of moves) {
+    const next = new Chess(chess.fen())
+    next.move({
+      from: move.from,
+      to: move.to,
+      promotion: move.promotion || 'q',
+    })
+
+    best = Math.min(
+      best,
+      minimax(next, depth - 1, alpha, beta)
+    )
+
+    beta = Math.min(beta, best)
+    if (beta <= alpha) break
+  }
+
+  return best
+}
+
+// O'rtacha darajadagi bot
+function getBotMove(chess) {
+  const moves = chess.moves({ verbose: true })
+
+  if (!moves.length) return null
+
+  let bestScore = Infinity
+  let bestMoves = []
+
+  for (const move of moves) {
+    const next = new Chess(chess.fen())
+
+    next.move({
+      from: move.from,
+      to: move.to,
+      promotion: move.promotion || 'q',
+    })
+
+    const score = minimax(next, 1, -Infinity, Infinity)
+
+    if (score < bestScore) {
+      bestScore = score
+      bestMoves = [move]
+    } else if (score === bestScore) {
+      bestMoves.push(move)
     }
   }
 
-  return all
+  // Bir xil baholi yurishlardan bittasini tanlaydi
+  return bestMoves[Math.floor(Math.random() * bestMoves.length)]
 }
 
 function App() {
-  const [game, setGame] = useState(createGame())
+  const gameRef = useRef(new Chess())
+
+  const [version, setVersion] = useState(0)
+  const [mode, setMode] = useState('bot')
   const [selected, setSelected] = useState(null)
-  const [legalMoves, setLegalMoves] = useState([])
   const [lastMove, setLastMove] = useState(null)
   const [history, setHistory] = useState([])
-  const [promotionMove, setPromotionMove] = useState(null)
+  const [promotionMoves, setPromotionMoves] = useState([])
+  const [thinking, setThinking] = useState(false)
 
-  const check = isInCheck(game.board, game.turn)
-  const allMoves = getAllLegalMoves(game)
-  const finished = allMoves.length === 0
+  const game = gameRef.current
+  const board = game.board()
+
+  const legalMoves = selected
+    ? game.moves({ square: selected, verbose: true })
+    : []
+
+  const possibleMoves = legalMoves.map(move => move.to)
+
+  const gameOver = game.isGameOver()
+
+  const botTurn = mode === 'bot' && game.turn() === 'b'
 
   let status = ''
 
-  if (finished && check) {
-    status = `MAT! ${game.turn === 'w' ? 'Qora' : 'Oq'} g'alaba qildi!`
-  } else if (finished) {
+  if (game.isCheckmate()) {
+    status = game.turn() === 'w'
+      ? 'MAT! Qora g‘alaba qildi!'
+      : 'MAT! Oq g‘alaba qildi!'
+  } else if (game.isStalemate()) {
     status = 'PAT — durang!'
+  } else if (game.isDraw()) {
+    status = 'Durang!'
+  } else if (thinking) {
+    status = 'Bot o‘ylayapti...'
   } else {
-    status = `${game.turn === 'w' ? 'Oq' : 'Qora'} yuradi${check ? ' — SHOH!' : ''}`
+    status =
+      (game.turn() === 'w' ? 'Oq' : 'Qora') +
+      ' yuradi' +
+      (game.isCheck() ? ' — SHOH!' : '')
   }
 
-  const handleClick = (index) => {
-    if (finished || promotionMove) return
+  // Yurishni bajarish
+  const playMove = (move) => {
+    if (gameOver || thinking) return
 
-    const move = legalMoves.find(m => m.to === index)
+    const previousFen = game.fen()
 
-    // Tanlangan donani yurish
-    if (move) {
-      if (move.promotion) {
-        setPromotionMove(move)
+    try {
+      const result = game.move({
+        from: move.from,
+        to: move.to,
+        promotion: move.promotion || 'q',
+      })
+
+      if (!result) return
+
+      setHistory(prev => [...prev, previousFen])
+      setLastMove([result.from, result.to])
+      setSelected(null)
+      setPromotionMoves([])
+      setVersion(v => v + 1)
+    } catch (error) {
+      console.error('Yurish xatosi:', error)
+    }
+  }
+
+  // Katak bosilganda
+  const handleClick = (square) => {
+    if (gameOver || thinking || botTurn || promotionMoves.length) return
+
+    const piece = game.get(square)
+
+    if (selected) {
+      const moves = game.moves({
+        square: selected,
+        verbose: true,
+      }).filter(move => move.to === square)
+
+      if (moves.length) {
+        const promotions = moves.filter(move => move.promotion)
+
+        if (promotions.length) {
+          setPromotionMoves(promotions)
+          return
+        }
+
+        playMove(moves[0])
         return
       }
+    }
 
-      playMove(move)
+    if (piece && piece.color === game.turn()) {
+      setSelected(square)
+    } else {
+      setSelected(null)
+    }
+  }
+
+  // Bot yurishi
+  useEffect(() => {
+    if (mode !== 'bot' || game.turn() !== 'b' || game.isGameOver()) {
       return
     }
 
-    // Boshqa o'z donasini tanlash
-    if (game.board[index]?.[0] === game.turn) {
-      setSelected(index)
-      setLegalMoves(getLegalMoves(game, index))
-    } else {
-      setSelected(null)
-      setLegalMoves([])
-    }
-  }
+    setThinking(true)
 
-  const playMove = (move, promotion = 'Q') => {
-    setHistory(prev => [...prev, game])
-    const next = makeMove(game, move, promotion)
+    const timer = setTimeout(() => {
+      const move = getBotMove(gameRef.current)
 
-    setGame(next)
-    setLastMove([move.from, move.to])
+      if (move) {
+        const previousFen = gameRef.current.fen()
+
+        const result = gameRef.current.move({
+          from: move.from,
+          to: move.to,
+          promotion: move.promotion || 'q',
+        })
+
+        if (result) {
+          setHistory(prev => [...prev, previousFen])
+          setLastMove([result.from, result.to])
+        }
+      }
+
+      setThinking(false)
+      setVersion(v => v + 1)
+    }, 650)
+
+    return () => clearTimeout(timer)
+  }, [version, mode])
+
+  // Yangi o'yin
+  const resetGame = (newMode = mode) => {
+    gameRef.current = new Chess()
+    setMode(newMode)
     setSelected(null)
-    setLegalMoves([])
-    setPromotionMove(null)
-  }
-
-  const resetGame = () => {
-    setGame(createGame())
-    setSelected(null)
-    setLegalMoves([])
     setLastMove(null)
     setHistory([])
-    setPromotionMove(null)
+    setPromotionMoves([])
+    setThinking(false)
+    setVersion(v => v + 1)
   }
 
+  // Yurishni qaytarish
   const undoMove = () => {
-    if (!history.length) return
+    if (!history.length || thinking) return
 
-    setGame(history[history.length - 1])
-    setHistory(prev => prev.slice(0, -1))
+    const undoCount = mode === 'bot' ? 2 : 1
+    const count = Math.min(undoCount, history.length)
+
+    const remainingHistory = history.slice(0, -count)
+    const previousFen = history[history.length - count]
+
+    gameRef.current = new Chess(previousFen)
+
+    setHistory(remainingHistory)
     setSelected(null)
-    setLegalMoves([])
+    setPromotionMoves([])
     setLastMove(null)
-    setPromotionMove(null)
+    setVersion(v => v + 1)
   }
 
   return (
     <div className="app">
       <h1>♟ Chess Game</h1>
 
+      {/* O'yin rejimi */}
+      <div className="mode-selector">
+        <button
+          className={mode === 'bot' ? 'mode-btn active' : 'mode-btn'}
+          onClick={() => resetGame('bot')}
+        >
+          🤖 Bot bilan
+        </button>
+
+        <button
+          className={mode === 'two' ? 'mode-btn active' : 'mode-btn'}
+          onClick={() => resetGame('two')}
+        >
+          👥 2 kishi
+        </button>
+      </div>
+
+      {/* O'yinchilar */}
+      <div className="players">
+        <div className="player-card">
+          <span className="player-icon">♔</span>
+          <div>
+            <strong>Siz</strong>
+            <small>Oq donalar</small>
+          </div>
+        </div>
+
+        <div className="player-card">
+          <span className="player-icon">♚</span>
+          <div>
+            <strong>{mode === 'bot' ? 'Bot' : '2-o‘yinchi'}</strong>
+            <small>Qora donalar</small>
+          </div>
+        </div>
+      </div>
+
+      {/* Holat */}
       <div className="status">
         {status}
       </div>
 
+      {/* Shaxmat taxtasi */}
       <div className="chess-board">
-        {game.board.map((piece, index) => {
-          const row = Math.floor(index / 8)
-          const col = index % 8
-          const isLight = (row + col) % 2 === 0
-          const isSelected = selected === index
-          const move = legalMoves.find(m => m.to === index)
-          const isLast = lastMove?.includes(index)
+        {board.map((row, r) =>
+          row.map((piece, c) => {
+            const square = `${'abcdefgh'[c]}${8 - r}`
+            const isLight = (r + c) % 2 === 0
+            const isSelected = selected === square
+            const isPossible = possibleMoves.includes(square)
+            const isLast = lastMove?.includes(square)
+            const isCapture = isPossible && !!piece
 
-          return (
-            <button
-              key={index}
-              className={`square ${isLight ? 'light' : 'dark'} ${
-                isSelected ? 'selected' : ''
-              } ${isLast ? 'last-move' : ''} ${
-                move ? (piece ? 'capture' : 'possible-move') : ''
-              }`}
-              onClick={() => handleClick(index)}
-              aria-label={`${String.fromCharCode(97 + col)}${8 - row}`}
-            >
-              {piece && (
-                <span className={piece[0] === 'w' ? 'white-piece' : 'black-piece'}>
-                  {pieces[piece[1]]}
-                </span>
-              )}
-            </button>
-          )
-        })}
+            return (
+              <button
+                key={square}
+                className={`square
+                  ${isLight ? 'light' : 'dark'}
+                  ${isSelected ? 'selected' : ''}
+                  ${isPossible ? 'possible-move' : ''}
+                  ${isCapture ? 'capture' : ''}
+                  ${isLast ? 'last-move' : ''}
+                `}
+                onClick={() => handleClick(square)}
+                disabled={thinking || botTurn || gameOver}
+                aria-label={square}
+              >
+                {piece && (
+                  <span className={
+                    piece.color === 'w'
+                      ? 'white-piece'
+                      : 'black-piece'
+                  }>
+                    {pieces[piece.color][piece.type]}
+                  </span>
+                )}
+
+                {c === 0 && (
+                  <small className="rank-label">{8 - r}</small>
+                )}
+
+                {r === 7 && (
+                  <small className="file-label">
+                    {'abcdefgh'[c]}
+                  </small>
+                )}
+              </button>
+            )
+          })
+        )}
       </div>
 
-      {promotionMove && (
+      {/* Piyodani almashtirish */}
+      {promotionMoves.length > 0 && (
         <div className="promotion">
           <p>Piyodani qaysi donaga almashtirasiz?</p>
-          {['Q', 'R', 'B', 'N'].map(type => (
-            <button
-              key={type}
-              onClick={() => playMove(promotionMove, type)}
-            >
-              {pieces[type]}
-            </button>
-          ))}
+
+          <div className="promotion-options">
+            {promotionMoves.map(move => (
+              <button
+                key={move.promotion}
+                onClick={() => playMove(move)}
+              >
+                {pieces[game.turn()][move.promotion]}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
+      {/* Tugmalar */}
       <div className="buttons">
         <button
           className="reset-btn"
           onClick={undoMove}
-          disabled={!history.length}
+          disabled={!history.length || thinking}
         >
           ↩ Qaytarish
         </button>
 
-        <button className="reset-btn" onClick={resetGame}>
+        <button
+          className="reset-btn"
+          onClick={() => resetGame()}
+        >
           Yangi o'yin
         </button>
+      </div>
+
+      <div className="game-info">
+        {mode === 'bot'
+          ? 'Siz oq donalarda o‘ynaysiz. Bot qora donalarda.'
+          : 'Oq va qora donalar bilan navbatma-navbat o‘ynang.'}
       </div>
     </div>
   )

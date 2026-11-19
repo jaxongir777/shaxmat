@@ -1,5 +1,4 @@
 
-/* RESET */
 * {
   margin: 0;
   padding: 0;
@@ -14,31 +13,102 @@ body {
   color: #f8fafc;
 }
 
-/* MAIN */
+button {
+  font-family: inherit;
+}
+
 .app {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 20px;
+  gap: 18px;
   padding: 25px 15px;
 }
 
 h1 {
-  font-size: clamp(25px, 5vw, 36px);
-  font-weight: 700;
+  font-size: clamp(26px, 5vw, 36px);
   letter-spacing: 1px;
   color: #f8fafc;
   text-shadow: 0 3px 15px rgba(0, 0, 0, 0.4);
 }
 
-/* GAME STATUS */
+/* MODE SELECTOR */
+.mode-selector {
+  display: flex;
+  gap: 10px;
+  padding: 5px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 12px;
+}
+
+.mode-btn {
+  padding: 11px 20px;
+  color: #cbd5e1;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.mode-btn:hover {
+  background: #334155;
+}
+
+.mode-btn.active {
+  color: #171717;
+  background: #d6a653;
+}
+
+/* PLAYERS */
+.players {
+  width: min(90vw, 560px);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.player-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  flex: 1;
+}
+
+.player-icon {
+  font-size: 32px;
+}
+
+.player-card strong,
+.player-card small {
+  display: block;
+}
+
+.player-card strong {
+  font-size: 14px;
+}
+
+.player-card small {
+  margin-top: 4px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+/* STATUS */
 .status {
-  min-height: 25px;
-  font-size: 17px;
-  font-weight: 600;
+  min-height: 24px;
   color: #eabf65;
+  font-size: 17px;
+  font-weight: 700;
   text-align: center;
 }
 
@@ -46,7 +116,6 @@ h1 {
 .chess-board {
   width: min(90vw, 560px);
   aspect-ratio: 1 / 1;
-
   display: grid;
   grid-template-columns: repeat(8, minmax(0, 1fr));
   grid-template-rows: repeat(8, minmax(0, 1fr));
@@ -54,8 +123,8 @@ h1 {
   border: 8px solid #60452f;
   border-radius: 5px;
   overflow: hidden;
-
   background: #60452f;
+
   box-shadow:
     0 0 0 2px #9b7954,
     0 15px 40px rgba(0, 0, 0, 0.5);
@@ -77,11 +146,12 @@ h1 {
   appearance: none;
   cursor: pointer;
   overflow: hidden;
-  aspect-ratio: 1 / 1;
-  transition: background-color 0.12s ease;
 }
 
-/* BOARD COLORS */
+.square:disabled {
+  cursor: default;
+}
+
 .light {
   background: #eeeed2;
 }
@@ -90,12 +160,10 @@ h1 {
   background: #769656;
 }
 
-/* SELECTED SQUARE */
 .square.selected {
   background: #f6d365;
 }
 
-/* LAST MOVE */
 .square.last-move {
   background: #cdd16b;
 }
@@ -104,7 +172,6 @@ h1 {
 .square span {
   position: relative;
   z-index: 2;
-
   display: block;
   font-family: "Segoe UI Symbol", "DejaVu Sans", sans-serif;
   font-size: clamp(25px, 7vw, 55px);
@@ -113,46 +180,68 @@ h1 {
   user-select: none;
 }
 
-/* WHITE PIECES */
 .white-piece {
-  color: #ffffff;
+  color: #fffdf4;
   text-shadow:
     0 1px 2px #222,
     0 2px 4px rgba(0, 0, 0, 0.7);
 }
 
-/* BLACK PIECES */
 .black-piece {
   color: #171717;
-  text-shadow:
-    0 1px 1px rgba(255, 255, 255, 0.5);
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
 }
 
-/* POSSIBLE MOVE DOT */
+/* POSSIBLE MOVES */
 .square.possible-move::after {
   content: "";
   position: absolute;
   z-index: 1;
-
   width: 25%;
   height: 25%;
   border-radius: 50%;
-
   background: rgba(20, 30, 20, 0.35);
   pointer-events: none;
 }
 
-/* CAPTURE INDICATOR */
 .square.capture::after {
   content: "";
   position: absolute;
   z-index: 1;
-
   inset: 5%;
   border: 5px solid rgba(20, 30, 20, 0.35);
   border-radius: 50%;
-
   pointer-events: none;
+}
+
+/* COORDINATES */
+.rank-label,
+.file-label {
+  position: absolute;
+  z-index: 3;
+  font-size: clamp(8px, 1.5vw, 11px);
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.rank-label {
+  top: 3px;
+  left: 4px;
+}
+
+.file-label {
+  right: 4px;
+  bottom: 3px;
+}
+
+.light .rank-label,
+.light .file-label {
+  color: #769656;
+}
+
+.dark .rank-label,
+.dark .file-label {
+  color: #eeeed2;
 }
 
 /* BUTTONS */
@@ -165,18 +254,14 @@ h1 {
 
 .reset-btn {
   padding: 12px 22px;
-
   background: #d6a653;
   color: #171717;
-
   border: none;
   border-radius: 8px;
-
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
-
-  transition: 0.2s ease;
+  transition: 0.2s;
 }
 
 .reset-btn:hover {
@@ -193,48 +278,53 @@ h1 {
 /* PROMOTION */
 .promotion {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  flex-direction: column;
   align-items: center;
   gap: 12px;
-
-  max-width: 350px;
   padding: 18px;
-
   background: #1e293b;
   border: 1px solid #475569;
   border-radius: 12px;
 }
 
 .promotion p {
-  width: 100%;
-  text-align: center;
   font-weight: 600;
+  text-align: center;
 }
 
-.promotion button {
+.promotion-options {
+  display: flex;
+  gap: 10px;
+}
+
+.promotion-options button {
   width: 55px;
   height: 55px;
-
   font-size: 36px;
   cursor: pointer;
-
   border: none;
   border-radius: 8px;
   background: #eeeed2;
-
   transition: 0.2s;
 }
 
-.promotion button:hover {
+.promotion-options button:hover {
   background: #eabf65;
   transform: scale(1.08);
+}
+
+/* GAME INFO */
+.game-info {
+  color: #94a3b8;
+  font-size: 13px;
+  text-align: center;
+  max-width: 400px;
 }
 
 /* MOBILE */
 @media (max-width: 480px) {
   .app {
-    gap: 15px;
+    gap: 14px;
     padding: 15px 8px;
   }
 
@@ -249,6 +339,19 @@ h1 {
 
   .square.capture::after {
     border-width: 3px;
+  }
+
+  .mode-btn {
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+
+  .player-card {
+    padding: 8px;
+  }
+
+  .player-icon {
+    font-size: 27px;
   }
 
   .reset-btn {
